@@ -1,0 +1,23 @@
+---
+title: "p8105_hw6_xy2397"
+author: "Xue Yang"
+date: "11/20/2018"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(rvest)
+
+
+knitr::opts_chunk$set(
+  fig.width = 6,
+  fig.asp = .6,
+  out.width = "90%"
+)
+
+theme_set(theme_bw() + theme(legend.position = "bottom"))
+
+set.seed(1)
+```
+
