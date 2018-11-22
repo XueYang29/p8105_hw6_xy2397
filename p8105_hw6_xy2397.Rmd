@@ -8,7 +8,8 @@ output: github_document
 ```{r setup, include=FALSE}
 library(tidyverse)
 library(rvest)
-
+library(modelr)
+library(mgcv)
 
 knitr::opts_chunk$set(
   fig.width = 6,
@@ -19,5 +20,126 @@ knitr::opts_chunk$set(
 theme_set(theme_bw() + theme(legend.position = "bottom"))
 
 set.seed(1)
+```
+
+
+## Problem 1
+
+
+```{r, message = FALSE}
+# load the data
+homicide = read_csv(file = "./data/homicide-data.csv") 
+```
+
+```{r}
+homicide = 
+  homicide %>% 
+  # create a city_state variabl
+  unite(city_state, city, state, sep = ",") %>% 
+  # create a binary variable which "0" indicates homicide is unsolved, "1" solved
+  mutate(resolved = as.numeric(disposition == "Closed by arrest"))  
+
+homicide_df = 
+  homicide %>%
+  mutate(city_state = as.factor(city_state)) %>% 
+  filter(!(city_state %in% c("Dallas,TX", "Phoenix,AZ", "Kansas City,MO", "Tulsa,AL"))) %>% 
+  mutate(victim_race = ifelse(victim_race == "White", "white", "non-white"),
+         victim_race = as.factor(victim_race),
+         victim_race = relevel(victim_race, ref = "white"),
+         victim_age = as.numeric(victim_age))
+
+```
+
+
+```{r}
+baltimore_df = 
+  homicide_df %>% 
+  filter(city_state == "Baltimore,MD") %>% 
+  select(resolved, victim_race, victim_age, victim_sex)
+
+fit = glm(resolved ~  victim_age + victim_sex + victim_race,
+          data = baltimore_df,
+          family = binomial)
+
+
+fit %>% 
+  broom::tidy() %>% 
+  mutate(or = boot::inv.logit(estimate),
+         OR = exp(estimate),
+         conf_low = exp(confint(fit, level = 0.95))[,1],
+         conf_high = exp(confint(fit, level = 0.95))[,2]) %>% 
+  filter(term == "victim_racenon-white") %>% 
+  mutate(city_state = "Baltimore,MD") %>% 
+  knitr::kable(digits = 3)
+
+
+```
+
+
+```{r}
+logistic_fit = function(city){
+  
+  city_data = 
+    homicide_df %>% 
+    filter(city_state == city) %>% 
+    select(resolved, victim_race, victim_age, victim_sex)
+
+  
+  fit = 
+    glm(resolved ~ victim_age + victim_sex + victim_race, 
+        data = city_data, 
+        family = binomial) 
+    
+  
+  result = 
+    fit %>%
+    broom::tidy() %>% 
+    mutate(OR = exp(estimate),
+           conf_low = exp(confint(fit, level = 0.95))[,1],
+           conf_high = exp(confint(fit, level = 0.95))[,2]) %>% 
+    filter(term == "victim_racenon-white") 
+  
+  result
+  
+}
+
+  
+```
+
+```{r, message = FALSE}
+
+city = 
+  homicide_df %>% 
+  count(city_state) %>% 
+  unnest()
+
+
+output = 
+  tibble(city = city$city_state) %>% 
+  mutate(estimates = purrr::map(.x = city, ~logistic_fit(city = .x))) %>%
+  unnest() %>% 
+  select(-term)
+
+output %>% 
+  knitr::kable(digits = 3)
+
+```
+
+```{r}
+output %>% 
+  mutate(city = forcats::fct_reorder(city, OR)) %>% 
+  ggplot(aes(x = city, y = OR, color = city)) +
+  geom_errorbar(aes(ymin = conf_low, ymax = conf_high)) +
+  labs(
+    title = "ORs and CIs for City",
+    x = "City",
+    y = "ORs and CIs"
+  ) +
+  viridis::scale_color_viridis(
+    name = "City",
+    discrete = TRUE
+  ) +
+  theme(legend.position = "none") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) 
 ```
 
