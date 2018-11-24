@@ -106,7 +106,7 @@ logistic_fit = function(city){
   
 ```
 
-```{r, message = FALSE}
+```{r, message = FALSE, warning = FALSE}
 
 city = 
   homicide_df %>% 
@@ -141,5 +141,126 @@ output %>%
   ) +
   theme(legend.position = "none") +
   theme(axis.text.x = element_text(angle = 90, hjust = 1)) 
+```
+
+
+## Problem 2
+
+```{r}
+birthweight = read_csv(file = "./data/birthweight.csv") 
+```
+
+```{r}
+# change some varibles from numeric to factors
+birthweight %>% 
+  mutate(babysex = as.factor(babysex),
+         frace = as.factor(frace),
+         malform = as.factor(malform),
+         mrace = as.factor(mrace))  
+```
+
+
+
+```{r}
+birthweight %>% 
+  ggplot(aes(x = bwt)) +
+  geom_histogram() +
+  labs(
+    title = "Histogram of Birth Weight",
+    x = "Birth Weight",
+    y = "Frequency"
+  )
+```
+From the plot we can find that the distribution of "bwt" is not significant skewed, so we can assume the normality of it.
+
+Then we focus on the linear relationship between each variables:
+```{r}
+cor(birthweight)
+```
+By looking at the correlation matrix of the full data, first we can find that there is no relationship between pnumlbw and pnumsga with other variables, so we can delete these two variables from the model.
+
+Then we focus on the relationship between the outcome: "bwt" and other variables, we can find that there is high positive linear relationship between "bwt" and "bhead", "blength", and there is some small linear relationship between "bwt" and "gaweeks". 
+
+So in our model, we first use "bhead" and "blength" to be the two predictors.
+
+```{r}
+fit1 = lm(bwt ~ bhead + blength, data = birthweight)
+
+summary(fit1)
+
+fit1 %>% 
+  broom::tidy() %>% 
+  knitr::kable(digits = 3)
+
+fit1 %>% 
+  broom::glance() %>% 
+  select(adj.r.squared)
+```
+From the results of the MLR of the these 2 covariates, through the globel F-test:
+
+$H_0:\beta_1=\beta_2=0$;
+$H_1:at~ least~one~\beta_i\ne0$
+
+Since $F_{stat}=54.47$, $p-value< 2.2e-16$, so we have enough evidence to reject the null and conclude that there is a regression relation between the outcome "bwt" and these 2 covariates.
+
+We can also focus on the Adjusted $R^2$: 0.6812, it means that 68.12% of the variation in the outcome "bwt" is explained by linear association with the "bhead" and "blength".
+
+In conclusion, this is a great model.
+
+```{r}
+birthweight %>% 
+  select(bwt, bhead, blength) %>% 
+  modelr::add_residuals(fit1) %>% 
+  modelr::add_predictions(fit1) %>% 
+  ggplot(aes(x = resid, y = pred, color = bwt)) + geom_point()
+```
+
+
+We can also use bootstrap to simulate and drawing repeatedly from the original population.
+
+```{r}
+birthweight %>% 
+  modelr::bootstrap(n = 1000) %>% 
+  mutate(models = map(strap, ~ lm(bwt ~ bhead + blength, data = .x)),
+         results = map(models, broom::tidy)
+         #pred =  map(models, ~ modelr::add_predictions),
+         #resid = map(models, ~ modelr::add_residuals)
+         ) %>% 
+  select(results) %>% 
+  unnest() %>% 
+  group_by(term) %>% 
+  summarize(boot_se = sd(estimate)) 
+```
+
+
+```{r}
+fit1 = lm(bwt ~ bhead + blength, data = birthweight)
+fit2 = lm(bwt ~ blength + gaweeks, data = birthweight)
+fit3 = lm(bwt ~ bhead + blength + babysex + bhead * blength + bhead * babysex + blength * babysex
+          + bhead * blength * babysex, data = birthweight)
+```
+
+```{r}
+cv_df = 
+  crossv_mc(birthweight, 100) %>% 
+  mutate(train = map(train, as_tibble),
+         test = map(test, as_tibble)) %>% 
+  mutate(fit1 = map(train, ~lm(bwt ~ bhead + blength, data = .x)),
+         fit2 = map(train, ~lm(bwt ~ blength + gaweeks, data = .x)),
+         fit3 = map(train, ~lm(bwt ~ bhead + blength + babysex + bhead * blength + 
+                                 bhead * babysex + blength * babysex + 
+                                 bhead * blength * babysex, data = .x))) %>% 
+  mutate(rmse_fit1 = map2_dbl(fit1, test, ~rmse(model = .x, data = .y)),
+         rmse_fit2 = map2_dbl(fit2, test, ~rmse(model = .x, data = .y)),
+         rmse_fit3 = map2_dbl(fit3, test, ~rmse(model = .x, data = .y)))
+```
+
+```{r}
+cv_df %>% 
+  select(.id, starts_with("rmse")) %>% 
+  gather(key = model, value = rmse, rmse_fit1:rmse_fit3) %>% 
+  mutate(model = str_replace(model, "rmse_", ""),
+         model = fct_inorder(model)) %>% 
+  ggplot(aes(x = model, y = rmse)) + geom_violin()
 ```
 
