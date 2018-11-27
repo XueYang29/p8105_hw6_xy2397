@@ -57,6 +57,8 @@ homicide_df =
 
 **Fit the logistic regression model**
 
+For city "Baltimore, MD", fit a logistic regression with resolved vs unresolved as the outcome and victim age, sex and race (as just defined) as predictors.
+
 Obtain the estimate and confidence interval of the adjusted odds ratio for solving homicides comparing non-white victims to white victims keeping all other variables fixed.
 ```{r}
 baltimore_df = 
@@ -70,31 +72,35 @@ fit = glm(resolved ~ victim_age + victim_sex + victim_race,
 
 fit %>% 
   broom::tidy() %>% 
-  mutate(OR = exp(estimate),
+  mutate(aOR = exp(estimate),
          conf_low = exp(confint(fit, level = 0.95))[,1],
          conf_high = exp(confint(fit, level = 0.95))[,2]) %>% 
   knitr::kable(digits = 3)
 ```
-From the results, we know that the exp(estimate) for victim_racenon-white indicate the differences non-white victims to white victims of adjusted odds ratio for solving homicides, keeping all the other variables fixed. In this way, we can filter the term to "victim_racenon-white"
+
+From the results, we know that the aOR = exp(estimate) for victim_racenon-white indicates the differences non-white victims to white victims of adjusted odds ratio for solving homicides, keeping all the other variables fixed. 
+
+In this way, we can filter the term to "victim_racenon-white" to get our results:
 
 ```{r}
 fit %>% 
   broom::tidy() %>% 
-  mutate(OR = exp(estimate),
+  mutate(aOR = exp(estimate),
          conf_low = exp(confint(fit, level = 0.95))[,1],
          conf_high = exp(confint(fit, level = 0.95))[,2]) %>% 
   filter(term == "victim_racenon-white") %>% 
   mutate(city_state = "Baltimore,MD") %>% 
-  select(city_state, OR, conf_low, conf_high) %>% 
+  select(city_state, aOR, conf_low, conf_high) %>% 
   knitr::kable(digits = 3)
 ```
-The above is the estimate and confidence interval of the adjusted odds ratio for solving homicides comparing non-white victims to white victims keeping all other variables fixed.
+
+The above is the estimate and confidence interval of the adjusted odds ratio for solving homicides comparing non-white victims to white victims keeping all other variables fixed for the city of "Baltimore, MD".
 
 
-Now run glm for each of the cities in your dataset.
+Now run glm for each of the cities in the dataset.
 
 ```{r}
-# create a function of city to gain the OR and confidence interval 
+# create a function of city to gain the aOR and confidence interval 
 logistic_fit = function(city){
   
   city_data = 
@@ -112,7 +118,7 @@ logistic_fit = function(city){
   result = 
     fit %>%
     broom::tidy() %>% 
-    mutate(OR = exp(estimate),
+    mutate(aOR = exp(estimate),
            conf_low = exp(confint(fit, level = 0.95))[,1],
            conf_high = exp(confint(fit, level = 0.95))[,2]) %>% 
     filter(term == "victim_racenon-white") 
@@ -140,25 +146,27 @@ output =
 
 # tidy the output
 output %>% 
-  select(city, OR, conf_low, conf_high) %>% 
+  select(city, aOR, conf_low, conf_high) %>% 
   knitr::kable(digits = 3)
 
 ```
-In the table above, we gain the dataframe with estimated ORs and CIs for each city.
+
+
+In the table above, we gain a dataframe with estimated ORs and CIs for each city.
 
 **Create a plot**
 
-Create a plot shows the estimated ORs and CIs for each city. 
+Create a plot shows the estimated aORs and CIs for each city. 
 ```{r}
 output %>% 
-  # organize cities according to estimated OR
-  mutate(city = forcats::fct_reorder(city, OR)) %>% 
-  ggplot(aes(x = city, y = OR, color = city)) +
+  # organize cities according to estimated aOR
+  mutate(city = forcats::fct_reorder(city, aOR)) %>% 
+  ggplot(aes(x = city, y = aOR, color = city)) +
   geom_errorbar(aes(ymin = conf_low, ymax = conf_high)) +
   labs(
-    title = "ORs and CIs for City",
+    title = "aORs and CIs for City",
     x = "City",
-    y = "ORs and CIs"
+    y = "aORs and CIs"
   ) +
   viridis::scale_color_viridis(
     name = "City",
@@ -167,8 +175,10 @@ output %>%
   theme(legend.position = "none") +
   theme(axis.text.x = element_text(angle = 90, hjust = 1)) 
 ```
+
 From the plot, we can find that city "Boston, MA" has the lowest adjusted odds ratio for solving homicides comparing non-white victims to white victims keeping all other variables fixed, while "Tampa, FL" has the highest.
-And for more than a half city, OR<1, which means that the odds of solving homicides in "non-white" victims is less than the odds in "white" victim.
+
+And for more than a half city, aOR<1, which means that the odds of solving homicides in "non-white" victims is less than the odds in "white" victim.
 
 ## Problem 2
 
@@ -180,7 +190,8 @@ birthweight = read_csv(file = "./data/birthweight.csv")
 Firstly, we change variables "babysex", "frace", "malform" and "mrace" into factor variables.
 ```{r}
 # change some varibles from numeric to factors
-birthweight %>% 
+birthweight_df =
+  birthweight %>% 
   mutate(babysex = as.factor(babysex),
          frace = as.factor(frace),
          malform = as.factor(malform),
@@ -190,7 +201,7 @@ birthweight %>%
 Then by checking for the missing data, we find that there is no missing data in the dataset.
 ```{r}
 # check for missing data
-table(is.na(birthweight))
+table(is.na(birthweight_df))
 ```
 
 **Exploration of the data**
@@ -198,7 +209,7 @@ table(is.na(birthweight))
 We look at the distribution of our outcome baby’s birth weight: "bwt", from the plot we can find that the distribution of "bwt" is not significant skewed, so we can assume the normality of it.
 
 ```{r}
-birthweight %>% 
+birthweight_df %>% 
   ggplot(aes(x = bwt)) +
   geom_histogram() +
   labs(
@@ -212,30 +223,25 @@ Then we focus on the linear relationship between each variables:
 ```{r}
 cor(birthweight)
 ```
+
 By looking at the correlation matrix of the full data, first we can find that there is no relationship between pnumlbw and pnumsga with other variables, so we can delete these two variables from the dataset.
 
 ```{r}
-birthweight =
-  birthweight %>% 
+birthweight_df =
+  birthweight_df %>% 
   select(-pnumlbw, -pnumsga)
 ```
 
 
-Then we focus on the relationship between the outcome: "bwt" and other variables, we can find that there is high positive linear relationship between "bwt" and "bhead", "blength", and there is some small linear relationship between "bwt" and "gaweeks". 
+Then we focus on the relationship between the outcome "bwt" and other variables, we can find that there is high positive linear relationship between "bwt" and "bhead", "blength", and there is some small linear relationship between "bwt" and "gaweeks". 
 
-So in our model, we first use "bhead" and "blength" to be the two predictors.
+So in our model, we first use "bhead" and "blength" to be the two main predictors only.
+
+
+**Propose a regression model for birthweight**
 
 ```{r}
-fit = lm(bwt ~ ., data = birthweight)
-summary(fit)
-step(fit, direction = 'backward')
-
-reg = lm(bwt ~ babysex + bhead + blength + delwt + fincome + 
-    gaweeks + menarche + mheight + momage + mrace + parity + 
-    ppwt + smoken, data = birthweight)
-summary(reg)
-
-fit1 = lm(bwt ~ bhead + blength, data = birthweight)
+fit1 = lm(bwt ~ bhead + blength, data = birthweight_df)
 
 summary(fit1)
 
@@ -243,32 +249,21 @@ fit1 %>%
   broom::tidy() %>% 
   knitr::kable(digits = 3)
 
-fit1 %>% 
-  broom::glance() %>% 
-  select(adj.r.squared)
 ```
+
 From the results of the MLR of the these 2 covariates, through the globel F-test:
 
-$H_0:\beta_1=\beta_2=0$;
-$H_1:at~ least~one~\beta_i\ne0$
-
-Since $F_{stat}=54.47$, $p-value< 2.2e-16$, so we have enough evidence to reject the null and conclude that there is a regression relation between the outcome "bwt" and these 2 covariates.
+Since p-value< 2.2e-16, so we have enough evidence to reject the null and conclude that there is a regression relation between the outcome "bwt" and these 2 covariates.
 
 We can also focus on the Adjusted $R^2$: 0.6812, it means that 68.12% of the variation in the outcome "bwt" is explained by linear association with the "bhead" and "blength".
 
-In conclusion, this is a great model.
+In conclusion, this is not a bad model.
 
 
-```{r}
-birthweight %>% 
-  
-  modelr::add_residuals(reg) %>% 
-  modelr::add_predictions(reg) %>% 
-  ggplot(aes(x = resid, y = pred, color = bwt)) + geom_point()
-```
+Make a plot of model residuals against fitted values:
 
 ```{r}
-birthweight %>% 
+birthweight_df %>% 
   select(bwt, bhead, blength) %>% 
   modelr::add_residuals(fit1) %>% 
   modelr::add_predictions(fit1) %>% 
@@ -279,7 +274,7 @@ birthweight %>%
 We can also use bootstrap to simulate and drawing repeatedly from the original population.
 
 ```{r}
-birthweight %>% 
+birthweight_df %>% 
   modelr::bootstrap(n = 1000) %>% 
   mutate(models = map(strap, ~ lm(bwt ~ bhead + blength, data = .x)),
          results = map(models, broom::tidy)) %>% 
@@ -287,21 +282,30 @@ birthweight %>%
   unnest() %>% 
   group_by(term) %>% 
   summarize(boot_estimate = mean(estimate),
-            boot_se = sd(estimate)) 
+            boot_se = sd(estimate)) %>% 
+  knitr::kable(digits = 3)
 
 ```
 
+The results we get from bootstrap is almost the same as what we have had.
+
+
+**Compare the model to two others**
 
 ```{r}
-fit1 = lm(bwt ~ bhead + blength, data = birthweight)
-fit2 = lm(bwt ~ blength + gaweeks, data = birthweight)
-fit3 = lm(bwt ~ bhead + blength + babysex + bhead * blength + bhead * babysex + blength * babysex
-          + bhead * blength * babysex, data = birthweight)
+fit1 = lm(bwt ~ bhead + blength, data = birthweight_df)
+fit2 = lm(bwt ~ blength + gaweeks, data = birthweight_df)
+fit3 = lm(bwt ~ bhead + blength + babysex + bhead * blength + 
+            bhead * babysex + blength * babysex + 
+            bhead * blength * babysex, data = birthweight_df)
 ```
 
+Make this comparison in terms of the cross-validated prediction error:
+
+Fit models from training data and obtain corresponding RMSEs for the testing data for these three models.
 ```{r}
 cv_df = 
-  crossv_mc(birthweight, 100) %>% 
+  crossv_mc(birthweight_df, 100) %>% 
   mutate(train = map(train, as_tibble),
          test = map(test, as_tibble)) %>% 
   mutate(fit1 = map(train, ~lm(bwt ~ bhead + blength, data = .x)),
@@ -314,22 +318,7 @@ cv_df =
          rmse_fit3 = map2_dbl(fit3, test, ~rmse(model = .x, data = .y)))
 ```
 
-```{r}
-cv_df = 
-  crossv_mc(birthweight, 100) %>% 
-  mutate(train = map(train, as_tibble),
-         test = map(test, as_tibble)) %>% 
-  mutate(fit1 = map(train, ~lm(bwt ~ babysex + bhead + blength + delwt + fincome + 
-    gaweeks + menarche + mheight + momage + mrace + parity + 
-    ppwt + smoken, data = .x)),
-         fit2 = map(train, ~lm(bwt ~ blength + gaweeks, data = .x)),
-         fit3 = map(train, ~lm(bwt ~ bhead + blength + babysex + bhead * blength + 
-                                 bhead * babysex + blength * babysex + 
-                                 bhead * blength * babysex, data = .x))) %>% 
-  mutate(rmse_fit1 = map2_dbl(fit1, test, ~rmse(model = .x, data = .y)),
-         rmse_fit2 = map2_dbl(fit2, test, ~rmse(model = .x, data = .y)),
-         rmse_fit3 = map2_dbl(fit3, test, ~rmse(model = .x, data = .y)))
-```
+Plot the prediction error distribution for each model to make the comparison more clearly:
 
 ```{r}
 cv_df %>% 
@@ -339,4 +328,10 @@ cv_df %>%
          model = fct_inorder(model)) %>% 
   ggplot(aes(x = model, y = rmse)) + geom_violin()
 ```
+
+From the plot above, we can find that the prediction errors of the model I built (using head circumference, length as main predictor only) and the third model which use head circumference, length, sex, and all interactions (including the three-way interaction) between these are almost the same, which both have lower prediction errors than the second model (using length at birth and gestational age as predictors for main effects only).
+
+
+
+
 
